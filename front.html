@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Document Scanner</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+        .user-email {
+            margin-right: 15px;
+            font-weight: bold;
+        }
+        .logout-btn {
+            background-color: white;
+            color: #4CAF50;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .container { 
+            max-width: 500px; 
+            margin: 40px auto; 
+            padding: 30px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        h2 {
+            margin-top: 0;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input, button { 
+            display: block; 
+            width: 100%; 
+            margin: 15px 0; 
+            padding: 10px;
+            border-radius: 4px;
+        }
+        input[type="text"], input[type="file"] {
+            border: 1px solid #ddd;
+        }
+        input[type="file"] {
+            background-color: white;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            z-index: 1000;
+        }
+        #popup button {
+            margin-top: 10px;
+            padding: 10px;
+        }
+        .scan-history {
+            margin-top: 30px;
+        }
+        .scan-history h3 {
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PDF Scanner</h1>
+        <div class="user-info">
+            <span class="user-email" id="user-email"></span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Upload PDF for Scanning</h2>
+        <p class="text-center"><strong>Scans remaining: <span id="remainingScans">20</span></strong></p>
+        <input type="text" id="keywords" placeholder="Enter Keywords (comma-separated)">
+        <input type="file" id="pdfFile" accept="application/pdf">
+        <button onclick="submitDocument()">Submit</button>
+        
+        <div class="scan-history">
+            <h3>Your Scan History</h3>
+            <table id="scan-history-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Filename</th>
+                        <th>Matched Words</th>
+                        <th>Credit Score</th>
+                    </tr>
+                </thead>
+                <tbody id="scan-history-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div id="popup">
+        <p id="popupText"></p>
+        <button onclick="closePopup()">OK</button>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuth();
+            loadScanHistory();
+        });
+
+        function checkAuth() {
+            const userEmail = localStorage.getItem('user_email');
+            if (!userEmail) {
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            document.getElementById('user-email').textContent = userEmail;
+        }
+
+        function logout() {
+            fetch('http://127.0.0.1:5000/logout', {
+                method: 'POST',
+                credentials: 'include'
+            })
+            .then(() => {
+                localStorage.removeItem('user_email');
+                window.location.href = 'index.html';
+            })
+            .catch(error => console.error('Logout error:', error));
+        }
+
+        async function loadScanHistory() {
+            try {
+                const response = await fetch('http://127.0.0.1:5000/user/scans', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    console.error('Failed to load scan history');
+                    return;
+                }
+                
+                const data = await response.json();
+                const tableBody = document.getElementById('scan-history-body');
+                tableBody.innerHTML = '';
+                
+                if (data.scans && data.scans.length > 0) {
+                    data.scans.forEach(scan => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${formatDate(scan.timestamp)}</td>
+                            <td>${scan.filename || 'N/A'}</td>
+                            <td>${scan.matched_words}</td>
+                            <td>${scan.credit_score}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                } else {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="4" style="text-align: center;">No scan history available</td>';
+                    tableBody.appendChild(row);
+                }
+            } catch (error) {
+                console.error('Error loading scan history:', error);
+            }
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleString();
+        }
+
+        function showPopup(message) {
+            document.getElementById("popupText").innerText = message;
+            document.getElementById("popup").style.display = "block";
+        }
+        
+        function closePopup() {
+            document.getElementById("popup").style.display = "none";
+        }
+        
+        async function submitDocument() {
+            const fileInput = document.getElementById("pdfFile");
+            if (!fileInput.files.length) {
+                alert("Please select a PDF file.");
+                return;
+            }
+        
+            const formData = new FormData();
+            formData.append("pdf", fileInput.files[0]);
+            formData.append("keywords", document.getElementById("keywords").value);
+        
+            try {
+                const response = await fetch("http://127.0.0.1:5000/scan-pdf", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "include"
+                });
+        
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showPopup(`Matched Words: ${data.matched_words} | Credit Score: ${data.credit_score}`);
+                    document.getElementById("remainingScans").innerText = data.scans_remaining; // Update UI
+                    loadScanHistory();
+                } else {
+                    showPopup(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                showPopup("Error scanning document. Please try again.");
+            }
+        }
+        
+    </script>
+</body>
+</html>
